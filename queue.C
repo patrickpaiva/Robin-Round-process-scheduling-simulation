@@ -12,8 +12,8 @@ typedef struct {
 } queue;
 
 // Função para inicializar a fila
-void initQueue(queue *queue) {
-    queue->array = (int *)malloc(MAX_SIZE * sizeof(int));
+void initQueue(queue *queue, int size) {
+    queue->array = (int *)malloc(size * sizeof(int));
     queue->front = -1;
     queue->rear = -1;
     queue->size = 0;
@@ -61,6 +61,16 @@ int pop(queue *queue) {
 
     //printf("%d removido da fila.\n", value+1);
     return value;
+}
+
+// função para pegar o primeiro da fila
+int peek(queue *queue) {
+    if (isEmpty(queue)) {
+        //printf("A fila está vazia. Não há elementos para acessar.\n");
+        return -1;  // Retorna um valor padrão indicando falha
+    }
+
+    return queue->array[queue->front];
 }
 
 // Função para liberar a memória alocada para a fila

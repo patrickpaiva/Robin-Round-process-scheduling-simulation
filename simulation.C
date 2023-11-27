@@ -10,11 +10,13 @@
 #define DISC_TIME 2
 #define MAGNETIC_TAPE_TIME 3
 #define PRINTER_TIME 4
+#define TIME_SLICE 2
 
 
 
 
 // Define filas a serem utilizadas
+queue cpu_running_queue;
 queue process_high_priority_queue;
 queue process_low_priority_queue;
 queue IO_disc_queue;
@@ -72,8 +74,8 @@ void initializeAllProcesses(){
     //for(int i=0; i<NUMBER_OF_PROCESSES; i++){
     //   processArray[i] = initializeProcess(i, getConfig(i, 3));
     //}
-     int p1[] = {0, 3, 1, 2, 3};
-     int p2[] = {1, 2, 0, 0, 0};
+     int p1[] = {0, 6, 1, 2, 3};
+     int p2[] = {1, 4, 0, 0, 0};
      processArray[0] = initializeProcess(0, p1);
      processArray[1] = initializeProcess(1, p2);
 }
@@ -117,7 +119,7 @@ void checkNewProcesses(int clock){
     }
 }
 
-int checkIORequest(int PID){
+int checkIORequest(int PID, queue q){
     if(processArray[PID].hasIO == 1){
         if(processArray[PID].IORequestTime == processArray[PID].CPURunTime){
             int type = processArray[PID].IOType;
@@ -125,29 +127,29 @@ int checkIORequest(int PID){
             switch(type){
                 case 1:
                     if(processArray[PID].priority==1){
-                        push(&IO_disc_queue, pop(&process_high_priority_queue));
+                        push(&IO_disc_queue, pop(&q));
                         printf("    adicionado na fila de IO: Disco\n");
                         return 1;
                     }
-                    push(&IO_disc_queue, pop(&process_low_priority_queue));
+                    push(&IO_disc_queue, pop(&q));
                     printf("    adicionado na fila de IO: Disco\n");
                     return 1;
                 case 2:
                     if(processArray[PID].priority==1){
-                        push(&IO_magnetic_tape_queue, pop(&process_high_priority_queue));
+                        push(&IO_magnetic_tape_queue, pop(&q));
                         printf("    adicionado na fila de IO: Fita Magnetica\n");
                         return 1;
                     }
-                    push(&IO_magnetic_tape_queue, pop(&process_low_priority_queue));
+                    push(&IO_magnetic_tape_queue, pop(&q));
                     printf("    adicionado na fila de IO: Fita Magnetica\n");
                     return 1;
                 case 3:
                     if(processArray[PID].priority==1){
-                        push(&IO_printer_queue, pop(&process_high_priority_queue));
+                        push(&IO_printer_queue, pop(&q));
                         printf("    adicionado na fila de IO: Impressora\n");
                         return 1;
                     }
-                    push(&IO_printer_queue, pop(&process_low_priority_queue));
+                    push(&IO_printer_queue, pop(&q));
                     printf("    adicionado na fila de IO: Impressora\n");
                     return 1;
             }
@@ -159,35 +161,37 @@ int checkIORequest(int PID){
 void runProcess(queue q){
     int PID = pop(&q);
     printf("Executando processo %d\n", PID+1);
+    
     int newTime = processArray[PID].CPURunTime + 1;
     int targetTime = processArray[PID].CPUTime;
     if(newTime==targetTime){
-        printf("    processo finalizado\n");
+        printf("    processo %d finalizado\n", PID+1);
+        pop(&q);
         completed++;
         return;
     }
     processArray[PID].CPURunTime = newTime;
-    if(checkIORequest(PID)==1){
+    processArray[PID].timeSliceCounter = processArray[PID].timeSliceCounter+1;
+    if(checkIORequest(PID, q)==1){
+        processArray[PID].timeSliceCounter = 0;
         return;
     }
-    push(&process_low_priority_queue, PID);
-    printf("    processo %d movido para fila de baixa prioridade\n", PID+1);
-    processArray[PID].priority=0;
+    if(processArray[PID].timeSliceCounter==TIME_SLICE){
+        push(&process_low_priority_queue, PID);
+        printf("    processo %d movido para fila de baixa prioridade\n", PID+1);
+        processArray[PID].priority=0;
+        return;
+    }
+    push(&cpu_running_queue, PID);
     return;
 }
 
 void runIO(queue q, int type){
-    int PID = pop(&q);
-    printf("Executando IO %d\n", PID+1);
+    if(isEmpty(&q)) { return; }
+    int PID = peek(&q);
+    if(processArray[PID].IOIsRunning==1) { return; }
+    printf("Marca para iniciar IO %d\n", PID+1);
     processArray[PID].IOIsRunning = 1;
-    switch(type){
-        case 1:
-            processArray[PID].IOTimeLeft = DISC_TIME - 1;
-        case 2:
-            processArray[PID].IOTimeLeft = MAGNETIC_TAPE_TIME - 1;
-        case 3:
-            processArray[PID].IOTimeLeft = PRINTER_TIME - 1;
-    }
 }
 
 void schedule(int clock){
@@ -216,37 +220,24 @@ void schedule(int clock){
                         push(&process_high_priority_queue, pop(&IO_printer_queue));
                         printf("        processo %d movido para fila de alta prioridade\n", PID+1);
                         processArray[PID].priority=1;
-                return;
                 }
             }
-        printf("IO do processo %d continuou sua execucao\n", PID+1);
-        return;
         }
     }
-
-    // Prioriza processo/IO
-    if((isEmpty(&IO_printer_queue))){
-        if(isEmpty(&IO_magnetic_tape_queue)){
-            if(isEmpty(&IO_disc_queue)){
-                if(isEmpty(&process_high_priority_queue)){
-                        runProcess(process_low_priority_queue);
-                        return;
-                }
-                runProcess(process_high_priority_queue);
-                return;
-            }
-            int type = 1;
-            runIO(IO_disc_queue ,type);
-            return;
-        }   
-        int type = 2;
-        runIO(IO_magnetic_tape_queue ,type);
-        return;
+    // Verifica qual processo será executado neste instante de tempo
+    if(isFull(&cpu_running_queue)){ // CENÁRIO 1 (CPU AINDA OCUPADA POIS PROCESSO NAO COMPLETOU DENTRO DO TIME SLICE)
+        runProcess(cpu_running_queue);
+    } else { // CENÁRIO 2 - ESCOLHE DAS DUAS FILAS DE PRIORIDADE
+        if(isEmpty(&process_high_priority_queue)){
+            runProcess(process_low_priority_queue); 
+        } else {
+            runProcess(process_high_priority_queue); 
+        }
     }
-    int type = 3;
-    runIO(IO_printer_queue ,type);
-    return;
-
+    // Executa IOs e aloca nas filas apropriadas
+    runIO(IO_disc_queue ,1);
+    runIO(IO_magnetic_tape_queue ,2);
+    runIO(IO_printer_queue ,3);
 }
 
 
@@ -254,21 +245,22 @@ int main (){
     int clock = 0;                                     // Inicializa clock
 
     // Inicializa filas
-    initQueue(&process_high_priority_queue);
-    initQueue(&process_low_priority_queue);
-    initQueue(&IO_disc_queue);
-    initQueue(&IO_magnetic_tape_queue);
-    initQueue(&IO_printer_queue);
+    initQueue(&cpu_running_queue, 1);
+    initQueue(&process_high_priority_queue, MAX_SIZE);
+    initQueue(&process_low_priority_queue, MAX_SIZE);
+    initQueue(&IO_disc_queue, MAX_SIZE);
+    initQueue(&IO_magnetic_tape_queue, MAX_SIZE);
+    initQueue(&IO_printer_queue, MAX_SIZE);
 
     initializeAllProcesses();                          // Inicializa processos
 
     // Inicia simulacao de processameto
     while(completed != NUMBER_OF_PROCESSES){
-        printf("ROUND %d ------------------------------------\n", clock);
+        printf("ROUND %d ------------------------------------\n", clock+1);
         // Busca por novos processos
         checkNewProcesses(clock);
         // Busca por novos eventos de I/O
-        checkNewIO(clock);
+        //checkNewIO(clock); // DÚVIDA - espera o PID mas tá recebendo clock?
         // Decide qual processo será priorizado
         schedule(clock);
         clock++;
