@@ -6,7 +6,7 @@
 
 
 // Constantes definidas pelo grupo
-#define NUMBER_OF_PROCESSES 2
+#define NUMBER_OF_PROCESSES 3
 #define MAX_COLUMNS 5
 #define DISC_TIME 2
 #define MAGNETIC_TAPE_TIME 3
