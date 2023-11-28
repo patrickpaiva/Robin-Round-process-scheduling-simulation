@@ -9,14 +9,16 @@ typedef struct {
     int front;     // Índice do elemento frontal
     int rear;      // Índice do elemento traseiro
     int size;      // Tamanho atual da fila
+    int lenght;      // Tamanho total que a fila pode ter
 } queue;
 
 // Função para inicializar a fila
-void initQueue(queue *queue, int size) {
-    queue->array = (int *)malloc(size * sizeof(int));
+void initQueue(queue *queue, int maxSize) {
+    queue->array = (int *)malloc(maxSize * sizeof(int));
     queue->front = -1;
     queue->rear = -1;
     queue->size = 0;
+    queue->lenght = maxSize;
 }
 
 // Função para verificar se a fila está vazia
@@ -26,7 +28,13 @@ int isEmpty(const queue *queue) {
 
 // Função para verificar se a fila está cheia
 int isFull(const queue *queue) {
-    return queue->size == MAX_SIZE;
+    //printf("size atual: %d, length total: %d\n", queue->size, queue->lenght);
+    return queue->size == queue->lenght;
+}
+
+// Função para verificar o tamanho atual
+int getSize(const queue *queue) {
+    return queue->size;
 }
 
 // Função para adicionar um elemento à fila
@@ -38,12 +46,15 @@ void push(queue *queue, int value) {
 
     if (isEmpty(queue)) {
         queue->front = 0;  // Se a fila estiver vazia, define o front para 0
+        queue->rear = 0;  // Se a fila estiver vazia, define o rear para 0
+    } else {
+        // Incrementa o rear e faz wrap-around se necessário
+        queue->rear = (queue->rear + 1) % queue->lenght;
     }
 
-    // Incrementa o rear e faz wrap-around se necessário
-    queue->rear = (queue->rear + 1) % MAX_SIZE;
     queue->array[queue->rear] = value;
     queue->size++;
+    //printf("rear: %d front: %d\n", queue->array[queue->rear], queue->array[queue->front]);
 
     //printf("%d adicionado à fila.\n", value+1);
 }
@@ -56,7 +67,14 @@ int pop(queue *queue) {
     }
 
     int value = queue->array[queue->front];
-    queue->front = (queue->front + 1) % MAX_SIZE;
+
+    if (queue->front == queue->rear) {
+        queue->front = -1;
+        queue->rear = -1;
+    } else {
+        queue->front = (queue->front + 1) % queue->lenght;
+    }
+    
     queue->size--;
 
     //printf("%d removido da fila.\n", value+1);
