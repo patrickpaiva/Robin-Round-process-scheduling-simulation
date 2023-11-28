@@ -7,6 +7,7 @@
 
 // Constantes definidas pelo grupo
 #define NUMBER_OF_PROCESSES 2
+#define MAX_COLUMNS 5
 #define DISC_TIME 2
 #define MAGNETIC_TAPE_TIME 3
 #define PRINTER_TIME 4
@@ -29,57 +30,43 @@ process processArray[NUMBER_OF_PROCESSES];
 // Variavel com o atual numero de processos e I/Os concluidos
 int completed = 0;                              
 
-/*// Le e armazena dados de processos e I/O dos arquivos de configuracao
-int* getConfig(int confignum, int datasize){
-    FILE* file;
-
-    // Abre o file para leitura
-    file = fopen("pconfig", "r");
-
-    if (file == NULL) {
-        fprintf(stderr, "Erro ao abrir o arquivo pconfig.\n");
-        return NULL;
-    }
-
-    // Move para a linha correspondente a confignum
-    for (int i = 1; i < confignum; i++) {
-        if (fscanf(file, "%*[^\n]") == EOF) {
-            fprintf(stderr, "Linha especificada não encontrada no arquivo.\n");
-            fclose(file);
-            return NULL;
-        }
-        fgetc(file); // Move para a próxima linha
-    }
-
-    // Aloca um array para armazenar os valores
-    int* valores = (int*)malloc(datasize * sizeof(int));
-
-    // Lê os valores da linha especificada
-    for (int i = 0; i < datasize; i++) {
-        if (fscanf(file, "%d", &valores[i]) != 1) {
-            fprintf(stderr, "Erro ao ler os valores do arquivo.\n");
-            free(valores);  // Libera a memória alocada antes de retornar
-            fclose(file);
-            return NULL;
-        }
-    }
-
-    fclose(file);
-
-    return valores;
-}
-*/
 // Armazena processos da simulacao em um array
-void initializeAllProcesses(){
-    //for(int i=0; i<NUMBER_OF_PROCESSES; i++){
-    //   processArray[i] = initializeProcess(i, getConfig(i, 3));
-    //}
-     int p1[] = {0, 6, 1, 2, 3};
-     int p2[] = {1, 4, 0, 0, 0};
-     processArray[0] = initializeProcess(0, p1);
-     processArray[1] = initializeProcess(1, p2);
-}
+void initializeAllProcesses() {
+    FILE *arquivo;
+    arquivo = fopen("pconfig.txt", "r");
 
+    if (arquivo == NULL) {
+        perror("Erro ao abrir o arquivo");
+        return;
+    }
+
+    char linha[100];
+    int processesLoadedCounter = 0;
+
+    // Ler e ignorar a primeira linha (cabeçalho)
+    if (fgets(linha, sizeof(linha), arquivo) == NULL) {
+        printf("Erro ao ler a primeira linha (cabeçalho).\n");
+        fclose(arquivo);
+        return;
+    }
+
+    while (fgets(linha, sizeof(linha), arquivo) != NULL) {
+        int valores[MAX_COLUMNS];
+        int lidos = sscanf(linha, "%d %d %d %d %d %d", 
+                           &valores[0], &valores[1], &valores[2],
+                           &valores[3], &valores[4], &valores[5]);
+
+        if (lidos == MAX_COLUMNS) {
+            processArray[processesLoadedCounter] = initializeProcess(processesLoadedCounter, valores);
+        } else {
+            printf("Erro ao ler a linha do arquivo.\n");
+            return;
+        }
+        processesLoadedCounter++;
+    }
+
+    fclose(arquivo);
+}
 int checkNewIO(int PID){
     if(processArray[PID].hasIO == 1){
         if(processArray[PID].IORequestTime == processArray[PID].CPURunTime){
@@ -151,6 +138,7 @@ void runProcess(queue *q){
     
     int newTime = processArray[PID].CPURunTime + 1;
     int targetTime = processArray[PID].CPUTime;
+    printf("Executando processo %d\n", PID+1);
     if(newTime==targetTime){
         printf("    processo %d finalizado\n", PID+1);
         pop(q);
@@ -163,7 +151,6 @@ void runProcess(queue *q){
         processArray[PID].timeSliceCounter = 0;
         return;
     }
-    printf("Executando processo %d\n", PID+1);
     if(processArray[PID].timeSliceCounter==TIME_SLICE){
         push(&process_low_priority_queue, PID);
         pop(q);
